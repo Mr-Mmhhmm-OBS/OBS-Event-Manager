@@ -20,7 +20,7 @@ auto_start_recording = true
 
 function unpause_recording(event)
 	if event == obs.OBS_FRONTEND_EVENT_SCENE_CHANGED then
-		obs.obs_frontend_recording_pause(true)
+		obs.obs_frontend_recording_pause(false)
 		obs.obs_frontend_remove_event_callback(unpause_recording)
 	end
 end
@@ -205,7 +205,7 @@ function script_update(settings)
 	obs.timer_remove(check_start)
 	obs.timer_remove(update_countdown)
 	set_text_source("")
-	if weekday == tonumber(os.date("%w")) and diff_time() > countdown_offset then
+	if weekday == tonumber(os.date("%w")) and diff_time() > countdown_offset and not (obs.obs_frontend_streaming_active() or obs.obs_frontend_recording_active()) then
 		obs.timer_add(check_start, 1000)
 	end
 end
