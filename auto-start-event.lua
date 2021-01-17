@@ -10,33 +10,51 @@ preshow_triggered = false
 preshow_duration = 300
 
 countdown_triggered = false
+countdown_text_source = ""
 countdown_duration = 60
-countdown_offset = 10
+countdown_offset = -10
 
 auto_start_streaming = true
 
 auto_start_time_type = { "--Disabled--", "Preshow", "Countdown" }
 auto_start_recording = 3
 
-function set_countdown_text()
-	print("update countdown")
-	if after_time(time, countdown_offset) then
-		print("live soon")
+function update_countdown()
+	local text = ""
+	local diff = diff_time() - countdown_offset
+	if diff < 0 then
+		text = "Live Soon"
 		obs.remove_current_callback()
+	else
+		text = string.format("%02d:%02d", math.floor(diff / 60), diff % 60)
+	end
+
+	set_countdown_text(text)
+end
+
+function set_countdown_text(text)
+	local source = obs.obs_get_source_by_name(countdown_text_source)
+
+	if source ~= nil then
+		local settings = obs.obs_data_create()
+		obs.obs_data_set_string(settings, "text", text)
+		obs.obs_source_update(source, settings)
+		obs.obs_data_release(settings)
+		obs.obs_source_release(source)
 	end
 end
 
-function after_time(start_time, offset)
-	start_time = start_time - (offset / 3600 * 4)
-	start_time = os.time{
-		year=os.date("%Y"), 
-		month=os.date("%m"), 
-		day=os.date("%d"), 
-		hour=math.floor(start_time / 4), 
-		min= ((start_time % 4) * 15) % 60,
-		sec=(((start_time % 4) * 15) / 60) % 60
+function diff_time()
+	start_time = time
+	local start_time = os.time{
+		year = os.date("%Y"), 
+		month = os.date("%m"), 
+		day = os.date("%d"), 
+		hour = math.floor(start_time / 4), 
+		min = math.floor(((start_time / 4) * 60) % 60),
+		sec = math.floor(((start_time / 4) * 60 * 60) % 60)
 	}
-	return os.difftime(start_time, os.time()) < 0
+	return os.difftime(start_time, os.time())
 end
 
 function current_scene_name()
@@ -47,8 +65,9 @@ function current_scene_name()
 end
 
 function check_start()
-	if after_time(time, preshow_duration) and not preshow_triggered then
-		print('preshow')
+	print(diff_time())
+	print("preshow " .. (preshow_duration))
+	if diff_time() <= preshow_duration and not preshow_triggered then
 		preshow_triggered = true
 		if current_scene_name() ~= start_scene then
 			local scenes = obs.obs_frontend_get_scenes()
@@ -65,7 +84,6 @@ function check_start()
 		end
 
 		if auto_start_streaming and not obs.obs_frontend_streaming_active() then
-			print('start stream')
 			obs.obs_frontend_streaming_start()
 		end
 
@@ -74,27 +92,17 @@ function check_start()
 		end
 	end
 
-	if after_time(time, countdown_duration + countdown_offset) and not countdown_triggered then
-		print("countdown")
+	print("countdown " .. (countdown_duration + countdown_offset))
+	if diff_time() <= countdown_offset + countdown_duration and not countdown_triggered then
 		countdown_triggered = true
 
-		obs.timer_add(set_countdown_text, 1000)
+		obs.timer_add(update_countdown, 1000)
 
 		if auto_start_recording == 3 and not obs.obs_frontend_recording_active() then
 			obs.obs_frontend_recording_start()
 		end
 		obs.remove_current_callback()
 	end
-end
-
-function on_event(event)
-	if event == obs.OBS_FRONTEND_EVENT_FINISHED_LOADING and weekday == os.date("%w") and not after_time(time, 0) then
-		obs.timer_add(check_start, 1000)
-	end
-end
-
-function script_load(settings)
-	obs.obs_frontend_add_event_callback(on_event)
 end
 
 function script_description()
@@ -126,7 +134,7 @@ function script_properties()
 
 	obs.obs_properties_add_int_slider(props, "preshow_duration", "Pre-Show Duration", 60, 300, 15)
 
-	local countdown_text_list = obs.obs_properties_add_list(props, "countdown_text", "Countdown Text", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
+	local countdown_text_list = obs.obs_properties_add_list(props, "countdown_text_source", "Countdown Text", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
 	local sources = obs.obs_enum_sources()
 	if sources ~= nil then
 		for _, source in ipairs(sources) do
@@ -157,6 +165,7 @@ function script_defaults(settings)
 	obs.obs_data_set_default_int(settings, "time", time)
 
 	obs.obs_data_set_default_int(settings, "preshow_duration", preshow_duration)
+
 	obs.obs_data_set_default_int(settings, "countdown_duration", countdown_duration)
 	obs.obs_data_set_default_int(settings, "countdown_offset", countdown_offset)
 
@@ -166,17 +175,27 @@ function script_defaults(settings)
 end
 
 function script_update(settings)
-	print("script update")
 	weekday = obs.obs_data_get_int(settings, "weekday")
 	time = obs.obs_data_get_int(settings, "time")
 	
 	start_scene = obs.obs_data_get_string(settings, "start_scene")
 
+	preshow_triggered = false
 	preshow_duration = obs.obs_data_get_int(settings, "preshow_duration")
+
+	countdown_triggered = false
+	countdown_text_source = obs.obs_data_get_string(settings, "countdown_text_source")
 	countdown_duration = obs.obs_data_get_int(settings, "countdown_duration")
-	countdown_offset = obs.obs_data_get_int(settings, "countdown_offset")
+	countdown_offset = obs.obs_data_get_int(settings, "countdown_offset") * -1
 
 	auto_start_streaming = obs.obs_data_get_bool(settings, "auto_start_streaming")
 
 	auto_start_recording = obs.obs_data_get_int(settings, "auto_start_recording")
+
+	obs.timer_remove(check_start)
+	set_countdown_text("")
+	if weekday == tonumber(os.date("%w")) and diff_time() > countdown_offset then
+		print(diff_time())
+		obs.timer_add(check_start, 1000)
+	end
 end
