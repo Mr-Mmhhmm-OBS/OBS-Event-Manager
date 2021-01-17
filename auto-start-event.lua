@@ -10,30 +10,40 @@ preshow_triggered = false
 preshow_duration = 300
 
 countdown_triggered = false
-countdown_text_source = ""
+text_source = ""
 countdown_duration = 60
 countdown_offset = -10
+countdown_final_text = "Live Soon!"
 
 auto_start_streaming = true
+auto_start_recording = true
 
-auto_start_time_type = { "--Disabled--", "Preshow", "Countdown" }
-auto_start_recording = 3
+function unpause_recording(event)
+	if event == obs.OBS_FRONTEND_EVENT_SCENE_CHANGED then
+		obs.obs_frontend_recording_pause(true)
+		obs.obs_frontend_remove_event_callback(unpause_recording)
+	end
+end
 
 function update_countdown()
 	local text = ""
-	local diff = diff_time() - countdown_offset
-	if diff < 0 then
-		text = "Live Soon"
+	local t = diff_time() - countdown_offset
+	if t < 0 then
+		text = "Live Soon!"
 		obs.remove_current_callback()
+		if obs.obs_frontend_recording_active() and get_current_scene_name() == start_scene then
+			obs.obs_frontend_recording_pause(true)
+			obs.obs_frontend_add_event_callback(unpause_recording)
+		end
 	else
-		text = string.format("%02d:%02d", math.floor(diff / 60), diff % 60)
+		text = string.format("%02d:%02d", math.floor(t / 60), t % 60)
 	end
 
-	set_countdown_text(text)
+	set_text_source(text)
 end
 
-function set_countdown_text(text)
-	local source = obs.obs_get_source_by_name(countdown_text_source)
+function set_text_source(text)
+	local source = obs.obs_get_source_by_name(text_source)
 
 	if source ~= nil then
 		local settings = obs.obs_data_create()
@@ -57,7 +67,7 @@ function diff_time()
 	return os.difftime(start_time, os.time())
 end
 
-function current_scene_name()
+function get_current_scene_name()
 	local scene = obs.obs_frontend_get_current_scene()
 	local scene_name = obs.obs_source_get_name(scene)
 	obs.obs_source_release(scene);
@@ -65,40 +75,46 @@ function current_scene_name()
 end
 
 function check_start()
-	if diff_time() <= preshow_duration and not preshow_triggered then
-		preshow_triggered = true
-		if current_scene_name() ~= start_scene then
-			local scenes = obs.obs_frontend_get_scenes()
-			if scenes ~= nil then
-				for _, scene in ipairs(scenes) do
-					scene_name = obs.obs_source_get_name(scene);
-					if scene_name == start_scene then
-						obs.obs_frontend_set_current_scene(scene)
-						break
+	local t = diff_time()
+	if t > preshow_duration and not (obs.obs_frontend_streaming_active() or obs.obs_frontend_recording_active()) then
+		local text = "Waiting"
+		for i=0,((t%3)-2)*-1 do
+			text = text .. "."
+		end
+		set_text_source(text)
+	else
+		if t <= preshow_duration and not preshow_triggered then
+			preshow_triggered = true
+			if get_current_scene_name() ~= start_scene then
+				local scenes = obs.obs_frontend_get_scenes()
+				if scenes ~= nil then
+					for _, scene in ipairs(scenes) do
+						scene_name = obs.obs_source_get_name(scene);
+						if scene_name == start_scene then
+							obs.obs_frontend_set_current_scene(scene)
+							break
+						end
 					end
 				end
+				obs.source_list_release(scenes)
 			end
-			obs.source_list_release(scenes)
+
+			if auto_start_streaming and not obs.obs_frontend_streaming_active() then
+				set_text_source("")
+				obs.obs_frontend_streaming_start()
+			end
 		end
 
-		if auto_start_streaming and not obs.obs_frontend_streaming_active() then
-			obs.obs_frontend_streaming_start()
+		if t <= countdown_offset + countdown_duration and not countdown_triggered then
+			countdown_triggered = true
+
+			obs.timer_add(update_countdown, 1000)
+
+			if auto_start_recording and not obs.obs_frontend_recording_active() then
+				obs.obs_frontend_recording_start()
+			end
+			obs.remove_current_callback()
 		end
-
-		if auto_start_recording == 2 and not obs.obs_frontend_recording_active() then
-			obs.obs_frontend_recording_start()
-		end
-	end
-
-	if diff_time() <= countdown_offset + countdown_duration and not countdown_triggered then
-		countdown_triggered = true
-
-		obs.timer_add(update_countdown, 1000)
-
-		if auto_start_recording == 3 and not obs.obs_frontend_recording_active() then
-			obs.obs_frontend_recording_start()
-		end
-		obs.remove_current_callback()
 	end
 end
 
@@ -131,7 +147,7 @@ function script_properties()
 
 	obs.obs_properties_add_int_slider(props, "preshow_duration", "Pre-Show Duration", 60, 300, 15)
 
-	local countdown_text_list = obs.obs_properties_add_list(props, "countdown_text_source", "Countdown Text", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
+	local countdown_text_list = obs.obs_properties_add_list(props, "text_source", "Text Source", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
 	local sources = obs.obs_enum_sources()
 	if sources ~= nil then
 		for _, source in ipairs(sources) do
@@ -146,13 +162,10 @@ function script_properties()
 
 	obs.obs_properties_add_int_slider(props, "countdown_duration", "Countdown Duration", 10, 300, 5)
 	obs.obs_properties_add_int_slider(props, "countdown_offset", "Countdown Offset", -300, 300, 10)
+	obs.obs_properties_add_text(props, "countdown_final_text", "Countdown Final Text", obs.OBS_TEXT_DEFAULT)
 
 	obs.obs_properties_add_bool(props, "auto_start_streaming", "Auto Start Streaming")
-
-	local start_recording_list = obs.obs_properties_add_list(props, "auto_start_recording", "Start Recording", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
-	for key, value in ipairs(auto_start_time_type) do
-		obs.obs_property_list_add_int(start_recording_list, value, key)
-	end
+	obs.obs_properties_add_bool(props, "auto_start_recording", "Auto Start Recording")
 
 	return props
 end
@@ -165,10 +178,10 @@ function script_defaults(settings)
 
 	obs.obs_data_set_default_int(settings, "countdown_duration", countdown_duration)
 	obs.obs_data_set_default_int(settings, "countdown_offset", countdown_offset)
+	obs.obs_data_set_default_string(settings, "countdown_final_text", countdown_final_text)
 
 	obs.obs_data_set_default_bool(settings, "auto_start_streaming", auto_start_streaming)
-
-	obs.obs_data_set_default_int(settings, "auto_start_recording", auto_start_recording)
+	obs.obs_data_set_default_bool(settings, "auto_start_recording", auto_start_recording)
 end
 
 function script_update(settings)
@@ -181,16 +194,17 @@ function script_update(settings)
 	preshow_duration = obs.obs_data_get_int(settings, "preshow_duration")
 
 	countdown_triggered = false
-	countdown_text_source = obs.obs_data_get_string(settings, "countdown_text_source")
+	text_source = obs.obs_data_get_string(settings, "text_source")
 	countdown_duration = obs.obs_data_get_int(settings, "countdown_duration")
 	countdown_offset = obs.obs_data_get_int(settings, "countdown_offset") * -1
+	countdown_final_text = obs.obs_data_get_string(settings, "countdown_final_text")
 
 	auto_start_streaming = obs.obs_data_get_bool(settings, "auto_start_streaming")
-
-	auto_start_recording = obs.obs_data_get_int(settings, "auto_start_recording")
+	auto_start_recording = obs.obs_data_get_bool(settings, "auto_start_recording")
 
 	obs.timer_remove(check_start)
-	set_countdown_text("")
+	obs.timer_remove(update_countdown)
+	set_text_source("")
 	if weekday == tonumber(os.date("%w")) and diff_time() > countdown_offset then
 		obs.timer_add(check_start, 1000)
 	end
