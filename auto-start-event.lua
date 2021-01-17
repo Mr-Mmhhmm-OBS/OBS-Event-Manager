@@ -2,12 +2,12 @@ obs=obslua
 days_of_week = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" }
 
 weekday = 0
-service_start = 42
+service_start = 10.5*60*60
 
 start_scene = ""
 
 preshow_triggered = false
-preshow_duration = 300
+preshow_duration = 1*60*5
 
 countdown_triggered = false
 text_source = ""
@@ -60,9 +60,9 @@ function diff_time()
 		year = os.date("%Y"), 
 		month = os.date("%m"), 
 		day = os.date("%d"), 
-		hour = math.floor(start_time / 4), 
-		min = math.floor(((start_time / 4) * 60) % 60),
-		sec = math.floor(((start_time / 4) * 60 * 60) % 60)
+		hour = math.floor(start_time / 60/ 60), 
+		min = (start_time / 60) % 60,
+		sec = start_time % 60
 	}
 	return os.difftime(start_time, os.time())
 end
@@ -122,20 +122,39 @@ function script_description()
 	return "Automatically starts the event at the pre-selected time.\n\nMade by Andrew Carbert"
 end
 
+function service_start_list_modified(props, property, settings)
+	local service_start = obslua.obs_data_get_int(settings, "service_start")
+	local livestream_start_list = obs.obs_properties_get(props, "preshow_duration")
+	obs.obs_property_list_clear(livestream_start_list)
+		for i=0,4 do
+		local seconds = i*60*5
+		obs.obs_property_list_add_int(livestream_start_list, string.format("%02d:%02d", math.floor((service_start-seconds)/60/60), (service_start-seconds)/60%60), i*60*5)
+	end
+	return true
+end
+
 function script_properties()
 	local props = obs.obs_properties_create()
 	
-	local datetime_group = obs.obs_properties_create()
-	local prop = obs.obs_properties_add_list(datetime_group, "weekday", "Day of Week", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
+	local event_start_group = obs.obs_properties_create()
+	local prop = obs.obs_properties_add_list(event_start_group, "weekday", "Day of Week", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
 	for i in pairs(days_of_week) do
 		obs.obs_property_list_add_int(prop, days_of_week[i], i - 1)
 	end
 		
-	prop = obs.obs_properties_add_list(datetime_group, "service_start", "Service Start", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
+	local service_start_list = obs.obs_properties_add_list(event_start_group, "service_start", "Service Start", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
+	obs.obs_property_set_modified_callback(service_start_list, service_start_list_modified)
 	for i=0,24*4-1 do
-		obs.obs_property_list_add_int(prop, string.format("%02d:%02d", math.floor(i/4), (i%4) * 15), i)
+		obs.obs_property_list_add_int(service_start_list, string.format("%02d:%02d", math.floor(i/4), (i%4) * 15), i/4*60*60)
 	end
-	obs.obs_properties_add_group(props, "datetime_group", "Event Start", obs.OBS_GROUP_NORMAL, datetime_group)
+
+	local livestream_start_list = obs.obs_properties_add_list(event_start_group, "preshow_duration", "Livestream Start", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
+	for i=0,4 do
+		print(service_start)
+		local seconds = i*60*5
+		obs.obs_property_list_add_int(livestream_start_list, string.format("%02d:%02d", math.floor((service_start-seconds)/60/60), (service_start-seconds)/60%60), i*60*5)
+	end
+	obs.obs_properties_add_group(props, "event_start_group", "Event Start", obs.OBS_GROUP_NORMAL, event_start_group)
 
 	local start_scene_list = obs.obs_properties_add_list(props, "start_scene", "Start Scene", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
 	local scene_names = obs.obs_frontend_get_scene_names()
@@ -144,8 +163,6 @@ function script_properties()
 			obs.obs_property_list_add_string(start_scene_list, scene_name, scene_name)
 		end
 	end
-
-	obs.obs_properties_add_int_slider(props, "preshow_duration", "Pre-Show Duration", 60, 300, 15)
 
 	local countdown_text_list = obs.obs_properties_add_list(props, "text_source", "Text Source", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
 	local sources = obs.obs_enum_sources()
