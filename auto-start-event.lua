@@ -2,7 +2,7 @@ obs=obslua
 days_of_week = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" }
 
 weekday = 0
-time = 42
+service_start = 42
 
 start_scene = ""
 
@@ -55,7 +55,7 @@ function set_text_source(text)
 end
 
 function diff_time()
-	start_time = time
+	start_time = service_start
 	local start_time = os.time{
 		year = os.date("%Y"), 
 		month = os.date("%m"), 
@@ -131,7 +131,7 @@ function script_properties()
 		obs.obs_property_list_add_int(prop, days_of_week[i], i - 1)
 	end
 		
-	prop = obs.obs_properties_add_list(datetime_group, "time", "Time", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
+	prop = obs.obs_properties_add_list(datetime_group, "service_start", "Service Start", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
 	for i=0,24*4-1 do
 		obs.obs_property_list_add_int(prop, string.format("%02d:%02d", math.floor(i/4), (i%4) * 15), i)
 	end
@@ -172,7 +172,7 @@ end
 
 function script_defaults(settings)
 	obs.obs_data_set_default_int(settings, "weekday", weekday)
-	obs.obs_data_set_default_int(settings, "time", time)
+	obs.obs_data_set_default_int(settings, "service_start", service_start)
 
 	obs.obs_data_set_default_int(settings, "preshow_duration", preshow_duration)
 
@@ -186,7 +186,7 @@ end
 
 function script_update(settings)
 	weekday = obs.obs_data_get_int(settings, "weekday")
-	time = obs.obs_data_get_int(settings, "time")
+	service_start = obs.obs_data_get_int(settings, "service_start")
 	
 	start_scene = obs.obs_data_get_string(settings, "start_scene")
 
