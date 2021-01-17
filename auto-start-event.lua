@@ -88,7 +88,7 @@ function check_start()
 end
 
 function on_event(event)
-	if event == obs.OBS_FRONTEND_EVENT_FINISHED_LOADING then
+	if event == obs.OBS_FRONTEND_EVENT_FINISHED_LOADING and weekday == os.date("%w") and not after_time(time, 0) then
 		obs.timer_add(check_start, 1000)
 	end
 end
