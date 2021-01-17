@@ -65,8 +65,6 @@ function current_scene_name()
 end
 
 function check_start()
-	print(diff_time())
-	print("preshow " .. (preshow_duration))
 	if diff_time() <= preshow_duration and not preshow_triggered then
 		preshow_triggered = true
 		if current_scene_name() ~= start_scene then
@@ -92,7 +90,6 @@ function check_start()
 		end
 	end
 
-	print("countdown " .. (countdown_duration + countdown_offset))
 	if diff_time() <= countdown_offset + countdown_duration and not countdown_triggered then
 		countdown_triggered = true
 
@@ -195,7 +192,6 @@ function script_update(settings)
 	obs.timer_remove(check_start)
 	set_countdown_text("")
 	if weekday == tonumber(os.date("%w")) and diff_time() > countdown_offset then
-		print(diff_time())
 		obs.timer_add(check_start, 1000)
 	end
 end
