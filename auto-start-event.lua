@@ -1,27 +1,45 @@
 obs=obslua
 days_of_week = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" }
 
-weekday = 0
-service_start = 10.5*60*60
+weekday = -1
+livestream_start = 37500 -- 10:25 AM
 
 start_scene = ""
 
 preshow_triggered = false
 preshow_duration = 1*60*5
 
-countdown_triggered = false
 text_source = ""
 countdown_duration = 60
 countdown_offset = -10
 countdown_final_text = "Live Soon!"
 
+video_source = ""
+
 auto_start_streaming = true
 auto_start_recording = true
 
-function unpause_recording(event)
+function event_callback_start_recording(event)
 	if event == obs.OBS_FRONTEND_EVENT_SCENE_CHANGED then
-		obs.obs_frontend_recording_pause(false)
-		obs.obs_frontend_remove_event_callback(unpause_recording)
+		if auto_start_recording and not obs.obs_frontend_recording_active() then
+			obs.obs_frontend_recording_start()
+		end
+	end
+end
+
+function show_video_source(show)
+	local scene = obs.obs_frontend_get_current_scene()
+    local sceneitems = obs.obs_scene_enum_items(scene)
+	if sceneitems ~= nil then
+		for key, sceneitem in ipairs(sceneitems) do
+			local source = obs.obs_sceneitem_get_source(sceneitem)
+			if obs.obs_source_get_name(source) == video_source then
+				obs.obs_sceneitem_set_visible(sceneitem, show)
+				break
+			end
+			obs.obs_source_release(source)
+		end
+		obs.sceneitem_list_release(sceneitems)
 	end
 end
 
@@ -29,12 +47,9 @@ function update_countdown()
 	local text = ""
 	local t = diff_time() - countdown_offset
 	if t < 0 then
-		text = "Live Soon!"
+		text = countdown_final_text
+		show_video_source(true)
 		obs.remove_current_callback()
-		if obs.obs_frontend_recording_active() and get_current_scene_name() == start_scene then
-			obs.obs_frontend_recording_pause(true)
-			obs.obs_frontend_add_event_callback(unpause_recording)
-		end
 	else
 		text = string.format("%02d:%02d", math.floor(t / 60), t % 60)
 	end
@@ -55,7 +70,7 @@ function set_text_source(text)
 end
 
 function diff_time()
-	start_time = service_start
+	start_time = livestream_start + preshow_duration
 	local start_time = os.time{
 		year = os.date("%Y"), 
 		month = os.date("%m"), 
@@ -76,7 +91,7 @@ end
 
 function check_start()
 	local t = diff_time()
-	if t > preshow_duration and not (obs.obs_frontend_streaming_active() or obs.obs_frontend_recording_active()) then
+	if t > preshow_duration and (auto_start_streaming or auto_start_recording) and not (obs.obs_frontend_streaming_active() or obs.obs_frontend_recording_active()) then
 		local text = "Waiting"
 		for i=0,((t%3)-2)*-1 do
 			text = text .. "."
@@ -99,20 +114,18 @@ function check_start()
 				obs.source_list_release(scenes)
 			end
 
-			if auto_start_streaming and not obs.obs_frontend_streaming_active() then
+			if auto_start_streaming then
 				set_text_source("")
 				obs.obs_frontend_streaming_start()
 			end
+
+			if auto_start_recording then
+				obs.obs_frontend_add_event_callback(event_callback_start_recording)
+			end
 		end
 
-		if t <= countdown_offset + countdown_duration and not countdown_triggered then
-			countdown_triggered = true
-
+		if t <= countdown_offset + countdown_duration then
 			obs.timer_add(update_countdown, 1000)
-
-			if auto_start_recording and not obs.obs_frontend_recording_active() then
-				obs.obs_frontend_recording_start()
-			end
 			obs.remove_current_callback()
 		end
 	end
@@ -122,74 +135,116 @@ function script_description()
 	return "Automatically starts the event at the pre-selected time.\n\nMade by Andrew Carbert"
 end
 
-function service_start_list_modified(props, property, settings)
-	local service_start = obslua.obs_data_get_int(settings, "service_start")
-	local livestream_start_list = obs.obs_properties_get(props, "preshow_duration")
-	obs.obs_property_list_clear(livestream_start_list)
+function livestream_start_list_modified(props, property, settings)
+	local service_start_list = obs.obs_properties_get(props, "preshow_duration")
+	obs.obs_property_list_clear(service_start_list)
 		for i=0,4 do
 		local seconds = i*60*5
-		obs.obs_property_list_add_int(livestream_start_list, string.format("%02d:%02d", math.floor((service_start-seconds)/60/60), (service_start-seconds)/60%60), i*60*5)
+		obs.obs_property_list_add_int(service_start_list, string.format("%02d:%02d", math.floor((livestream_start+seconds)/60/60), (livestream_start+seconds)/60%60), i*60*5)
 	end
+	return true
+end
+
+function text_source_list_modified(props, property, settings)
+	obs.obs_property_set_enabled(obs.obs_properties_get(props, "countdown_duration"), weekday > -1 and text_source ~= "")
+	obs.obs_property_set_enabled(obs.obs_properties_get(props, "countdown_offset"), weekday > -1 and text_source ~= "")
+	obs.obs_property_set_enabled(obs.obs_properties_get(props, "countdown_final_text"), weekday > -1 and text_source ~= "")
+	return true
+end
+
+function weekday_modified(props, property, settings)
+	print(tostring(weekday > -1))
+	obs.obs_property_set_enabled(obs.obs_properties_get(props, "livestream_start"), (weekday > -1))
+	obs.obs_property_set_enabled(obs.obs_properties_get(props, "preshow_duration"), weekday > -1)
+	obs.obs_property_set_enabled(obs.obs_properties_get(props, "start_scene"), weekday > -1)
+	obs.obs_property_set_enabled(obs.obs_properties_get(props, "auto_start_streaming"), weekday > -1)
+	obs.obs_property_set_enabled(obs.obs_properties_get(props, "auto_start_recording"), weekday > -1)
+	obs.obs_property_set_enabled(obs.obs_properties_get(props, "text_source"), weekday > -1)
+	obs.obs_property_set_enabled(obs.obs_properties_get(props, "countdown_duration"), weekday > -1 and text_source ~= "")
+	obs.obs_property_set_enabled(obs.obs_properties_get(props, "countdown_offset"), weekday > -1 and text_source ~= "")
+	obs.obs_property_set_enabled(obs.obs_properties_get(props, "countdown_final_text"), weekday > -1 and text_source ~= "")
+	obs.obs_property_set_enabled(obs.obs_properties_get(props, "video_source"), weekday > -1)
 	return true
 end
 
 function script_properties()
 	local props = obs.obs_properties_create()
 	
-	local event_start_group = obs.obs_properties_create()
-	local prop = obs.obs_properties_add_list(event_start_group, "weekday", "Day of Week", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
+	local schedule_group = obs.obs_properties_create()
+	local p = obs.obs_properties_add_list(schedule_group, "weekday", "Day of Week", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
+	obs.obs_property_set_modified_callback(p, weekday_modified)
+	obs.obs_property_list_add_int(p, "--Disabled--", -1)
 	for i in pairs(days_of_week) do
-		obs.obs_property_list_add_int(prop, days_of_week[i], i - 1)
+		obs.obs_property_list_add_int(p, days_of_week[i], i - 1)
 	end
 		
-	local service_start_list = obs.obs_properties_add_list(event_start_group, "service_start", "Service Start", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
-	obs.obs_property_set_modified_callback(service_start_list, service_start_list_modified)
-	for i=0,24*4-1 do
-		obs.obs_property_list_add_int(service_start_list, string.format("%02d:%02d", math.floor(i/4), (i%4) * 15), i/4*60*60)
+	p = obs.obs_properties_add_list(schedule_group, "livestream_start", "Livestream Start", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
+	obs.obs_property_set_enabled(p, weekday > -1)
+	obs.obs_property_set_modified_callback(p, livestream_start_list_modified)
+	for i=0,(24*12)-1 do
+		obs.obs_property_list_add_int(p, string.format("%02d:%02d", math.floor(i/12), (i%12) * 5), (i/12)*60*60)
 	end
-
-	local livestream_start_list = obs.obs_properties_add_list(event_start_group, "preshow_duration", "Livestream Start", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
+		
+	p = obs.obs_properties_add_list(schedule_group, "preshow_duration", "Service Start", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
+	obs.obs_property_set_enabled(p, weekday > -1)
+	obs.obs_property_list_clear(p)
 	for i=0,4 do
-		print(service_start)
 		local seconds = i*60*5
-		obs.obs_property_list_add_int(livestream_start_list, string.format("%02d:%02d", math.floor((service_start-seconds)/60/60), (service_start-seconds)/60%60), i*60*5)
+		obs.obs_property_list_add_int(p, string.format("%02d:%02d", math.floor((livestream_start+seconds)/60/60), (livestream_start+seconds)/60%60), i*60*5)
 	end
-	obs.obs_properties_add_group(props, "event_start_group", "Event Start", obs.OBS_GROUP_NORMAL, event_start_group)
+	obs.obs_properties_add_group(props, "schedule_group", "Schedule", obs.OBS_GROUP_NORMAL, schedule_group)
 
-	local start_scene_list = obs.obs_properties_add_list(props, "start_scene", "Start Scene", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
+	p = obs.obs_properties_add_list(props, "start_scene", "Start Scene", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
+	obs.obs_property_set_enabled(p, weekday > -1)
 	local scene_names = obs.obs_frontend_get_scene_names()
 	if scene_names ~= nil then
 		for _, scene_name in ipairs(scene_names) do
-			obs.obs_property_list_add_string(start_scene_list, scene_name, scene_name)
+			obs.obs_property_list_add_string(p, scene_name, scene_name)
 		end
 	end
+	
+	p = obs.obs_properties_add_bool(props, "auto_start_streaming", "Auto Start Streaming")
+	obs.obs_property_set_enabled(p, weekday > -1)
+	p = obs.obs_properties_add_bool(props, "auto_start_recording", "Auto Start Recording")
+	obs.obs_property_set_enabled(p, weekday > -1)
 
-	local countdown_text_list = obs.obs_properties_add_list(props, "text_source", "Text Source", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
+	local text_source_list = obs.obs_properties_add_list(props, "text_source", "Text Source", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
+	obs.obs_property_set_enabled(text_source_list, weekday > -1)
+	obs.obs_property_set_modified_callback(text_source_list, text_source_list_modified)
+	obs.obs_property_list_add_string(text_source_list, "--Disabled--", "")
+
+	p = obs.obs_properties_add_int_slider(props, "countdown_duration", "Countdown Duration", 10, 300, 5)
+	obs.obs_property_set_enabled(p, weekday > -1 and text_source ~= "")
+	p = obs.obs_properties_add_int_slider(props, "countdown_offset", "Countdown Offset", -300, 300, 10)
+	obs.obs_property_set_enabled(p, weekday > -1 and text_source ~= "")
+	p = obs.obs_properties_add_text(props, "countdown_final_text", "Countdown Final Text", obs.OBS_TEXT_DEFAULT)
+	obs.obs_property_set_enabled(p, weekday > -1 and text_source ~= "")
+
+	local video_source_list = obs.obs_properties_add_list(props, "video_source", "Video Source", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
+	obs.obs_property_set_enabled(video_source_list, weekday > -1)
+	obs.obs_property_list_add_string(video_source_list, "--Disabled--", "")
 	local sources = obs.obs_enum_sources()
 	if sources ~= nil then
 		for _, source in ipairs(sources) do
 			source_id = obs.obs_source_get_unversioned_id(source)
 			if source_id == "text_gdiplus" or source_id == "text_ft2_source" then
 				local name = obs.obs_source_get_name(source)
-				obs.obs_property_list_add_string(countdown_text_list, name, name)
+				obs.obs_property_list_add_string(text_source_list, name, name)
+			end
+			if source_id == "dshow_input" then
+				local name = obs.obs_source_get_name(source)
+				obs.obs_property_list_add_string(video_source_list, name, name)
 			end
 		end
 	end
 	obs.source_list_release(sources)
-
-	obs.obs_properties_add_int_slider(props, "countdown_duration", "Countdown Duration", 10, 300, 5)
-	obs.obs_properties_add_int_slider(props, "countdown_offset", "Countdown Offset", -300, 300, 10)
-	obs.obs_properties_add_text(props, "countdown_final_text", "Countdown Final Text", obs.OBS_TEXT_DEFAULT)
-
-	obs.obs_properties_add_bool(props, "auto_start_streaming", "Auto Start Streaming")
-	obs.obs_properties_add_bool(props, "auto_start_recording", "Auto Start Recording")
 
 	return props
 end
 
 function script_defaults(settings)
 	obs.obs_data_set_default_int(settings, "weekday", weekday)
-	obs.obs_data_set_default_int(settings, "service_start", service_start)
+	obs.obs_data_set_default_int(settings, "livestream_start", livestream_start)
 
 	obs.obs_data_set_default_int(settings, "preshow_duration", preshow_duration)
 
@@ -203,24 +258,26 @@ end
 
 function script_update(settings)
 	weekday = obs.obs_data_get_int(settings, "weekday")
-	service_start = obs.obs_data_get_int(settings, "service_start")
+	livestream_start = obs.obs_data_get_int(settings, "livestream_start")
 	
 	start_scene = obs.obs_data_get_string(settings, "start_scene")
+
+	auto_start_streaming = obs.obs_data_get_bool(settings, "auto_start_streaming")
+	auto_start_recording = obs.obs_data_get_bool(settings, "auto_start_recording")
 
 	preshow_triggered = false
 	preshow_duration = obs.obs_data_get_int(settings, "preshow_duration")
 
-	countdown_triggered = false
 	text_source = obs.obs_data_get_string(settings, "text_source")
 	countdown_duration = obs.obs_data_get_int(settings, "countdown_duration")
 	countdown_offset = obs.obs_data_get_int(settings, "countdown_offset") * -1
 	countdown_final_text = obs.obs_data_get_string(settings, "countdown_final_text")
 
-	auto_start_streaming = obs.obs_data_get_bool(settings, "auto_start_streaming")
-	auto_start_recording = obs.obs_data_get_bool(settings, "auto_start_recording")
+	video_source = obs.obs_data_get_string(settings, "video_source")
 
 	obs.timer_remove(check_start)
 	obs.timer_remove(update_countdown)
+	show_video_source(false)
 	set_text_source("")
 	if weekday == tonumber(os.date("%w")) and diff_time() > countdown_offset and not (obs.obs_frontend_streaming_active() or obs.obs_frontend_recording_active()) then
 		obs.timer_add(check_start, 1000)
