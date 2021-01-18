@@ -153,7 +153,7 @@ function text_source_list_modified(props, property, settings)
 end
 
 function weekday_modified(props, property, settings)
-	obs.obs_property_set_enabled(obs.obs_properties_get(props, "livestream_start"), (weekday > -1))
+	obs.obs_property_set_enabled(obs.obs_properties_get(props, "livestream_start"), weekday > -1)
 	obs.obs_property_set_enabled(obs.obs_properties_get(props, "preshow_duration"), weekday > -1)
 	obs.obs_property_set_enabled(obs.obs_properties_get(props, "start_scene"), weekday > -1)
 	obs.obs_property_set_enabled(obs.obs_properties_get(props, "auto_start_streaming"), weekday > -1)
