@@ -132,15 +132,15 @@ function check_start()
 end
 
 function script_description()
-	return "Automatically starts the event at the pre-selected time.\n\nMade by Andrew Carbert"
+	return "Automatically starts the event at the pre-selected time.\n\nMade by Andrew Carbert\nv1.1"
 end
 
 function livestream_start_list_modified(props, property, settings)
-	local service_start_list = obs.obs_properties_get(props, "preshow_duration")
-	obs.obs_property_list_clear(service_start_list)
+	local event_start_list = obs.obs_properties_get(props, "preshow_duration")
+	obs.obs_property_list_clear(event_start_list)
 		for i=0,4 do
 		local seconds = i*60*5
-		obs.obs_property_list_add_int(service_start_list, string.format("%02d:%02d", math.floor((livestream_start+seconds)/60/60), (livestream_start+seconds)/60%60), i*60*5)
+		obs.obs_property_list_add_int(event_start_list, string.format("%02d:%02d", math.floor((livestream_start+seconds)/60/60), (livestream_start+seconds)/60%60), i*60*5)
 	end
 	return true
 end
@@ -184,7 +184,7 @@ function script_properties()
 		obs.obs_property_list_add_int(p, string.format("%02d:%02d", math.floor(i/12), (i%12) * 5), (i/12)*60*60)
 	end
 		
-	p = obs.obs_properties_add_list(schedule_group, "preshow_duration", "Service Start", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
+	p = obs.obs_properties_add_list(schedule_group, "preshow_duration", "Event Start", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
 	obs.obs_property_set_enabled(p, weekday > -1)
 	obs.obs_property_list_clear(p)
 	for i=0,4 do
