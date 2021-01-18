@@ -132,7 +132,7 @@ function check_start()
 end
 
 function script_description()
-	return "Automatically starts the event at the pre-selected time.\n\nMade by Andrew Carbert\nv1.1"
+	return "Automatically starts the event at the pre-selected time.\nv1.1"
 end
 
 function livestream_start_list_modified(props, property, settings)
