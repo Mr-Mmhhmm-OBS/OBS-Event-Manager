@@ -1,4 +1,7 @@
 obs=obslua
+
+local version = 1.2
+
 days_of_week = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" }
 
 weekday = -1
@@ -132,7 +135,7 @@ function check_start()
 end
 
 function script_description()
-	return "Automatically starts a scheduled event.\nv1.1"
+	return "Automatically starts a scheduled event.\nv" .. version
 end
 
 function livestream_start_list_modified(props, property, settings)
@@ -145,14 +148,7 @@ function livestream_start_list_modified(props, property, settings)
 	return true
 end
 
-function text_source_list_modified(props, property, settings)
-	obs.obs_property_set_enabled(obs.obs_properties_get(props, "countdown_duration"), weekday > -1 and text_source ~= "")
-	obs.obs_property_set_enabled(obs.obs_properties_get(props, "countdown_offset"), weekday > -1 and text_source ~= "")
-	obs.obs_property_set_enabled(obs.obs_properties_get(props, "countdown_final_text"), weekday > -1 and text_source ~= "")
-	return true
-end
-
-function weekday_modified(props, property, settings)
+function on_property_modified(props, property, settings)
 	obs.obs_property_set_enabled(obs.obs_properties_get(props, "livestream_start"), weekday > -1)
 	obs.obs_property_set_enabled(obs.obs_properties_get(props, "preshow_duration"), weekday > -1)
 	obs.obs_property_set_enabled(obs.obs_properties_get(props, "start_scene"), weekday > -1)
@@ -171,7 +167,7 @@ function script_properties()
 	
 	local schedule_group = obs.obs_properties_create()
 	local p = obs.obs_properties_add_list(schedule_group, "weekday", "Day of Week", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_INT)
-	obs.obs_property_set_modified_callback(p, weekday_modified)
+	obs.obs_property_set_modified_callback(p, on_property_modified)
 	obs.obs_property_list_add_int(p, "--Disabled--", -1)
 	for i in pairs(days_of_week) do
 		obs.obs_property_list_add_int(p, days_of_week[i], i - 1)
@@ -209,7 +205,7 @@ function script_properties()
 
 	local text_source_list = obs.obs_properties_add_list(props, "text_source", "Text Source", obs.OBS_COMBO_TYPE_LIST, obs.OBS_COMBO_FORMAT_STRING)
 	obs.obs_property_set_enabled(text_source_list, weekday > -1)
-	obs.obs_property_set_modified_callback(text_source_list, text_source_list_modified)
+	obs.obs_property_set_modified_callback(text_source_list, on_property_modified)
 	obs.obs_property_list_add_string(text_source_list, "--Disabled--", "")
 
 	p = obs.obs_properties_add_int_slider(props, "countdown_duration", "Countdown Duration", 10, 300, 5)
