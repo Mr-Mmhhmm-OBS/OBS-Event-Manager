@@ -1,6 +1,6 @@
 obs=obslua
 
-local version = "1.3""
+local version = "1.3"
 
 days_of_week = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" }
 
