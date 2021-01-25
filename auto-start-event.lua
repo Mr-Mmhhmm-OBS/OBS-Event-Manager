@@ -1,6 +1,6 @@
 obs=obslua
 
-local version = 1.2
+local version = "1.3""
 
 days_of_week = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" }
 
@@ -118,7 +118,6 @@ function check_start()
 			end
 
 			if auto_start_streaming then
-				set_text_source("")
 				obs.obs_frontend_streaming_start()
 			end
 
@@ -127,10 +126,8 @@ function check_start()
 			end
 		end
 
-		if t <= countdown_offset + countdown_duration then
-			obs.timer_add(update_countdown, 1000)
-			obs.remove_current_callback()
-		end
+		obs.timer_add(update_countdown, 1000)
+		obs.remove_current_callback()
 	end
 end
 
@@ -155,7 +152,6 @@ function on_property_modified(props, property, settings)
 	obs.obs_property_set_enabled(obs.obs_properties_get(props, "auto_start_streaming"), weekday > -1)
 	obs.obs_property_set_enabled(obs.obs_properties_get(props, "auto_start_recording"), weekday > -1)
 	obs.obs_property_set_enabled(obs.obs_properties_get(props, "text_source"), weekday > -1)
-	obs.obs_property_set_enabled(obs.obs_properties_get(props, "countdown_duration"), weekday > -1 and text_source ~= "")
 	obs.obs_property_set_enabled(obs.obs_properties_get(props, "countdown_offset"), weekday > -1 and text_source ~= "")
 	obs.obs_property_set_enabled(obs.obs_properties_get(props, "countdown_final_text"), weekday > -1 and text_source ~= "")
 	obs.obs_property_set_enabled(obs.obs_properties_get(props, "video_source"), weekday > -1)
@@ -208,7 +204,6 @@ function script_properties()
 	obs.obs_property_set_modified_callback(text_source_list, on_property_modified)
 	obs.obs_property_list_add_string(text_source_list, "--Disabled--", "")
 
-	p = obs.obs_properties_add_int_slider(props, "countdown_duration", "Countdown Duration", 10, 300, 5)
 	obs.obs_property_set_enabled(p, weekday > -1 and text_source ~= "")
 	p = obs.obs_properties_add_int_slider(props, "countdown_offset", "Countdown Offset", -300, 300, 10)
 	obs.obs_property_set_enabled(p, weekday > -1 and text_source ~= "")
@@ -243,7 +238,6 @@ function script_defaults(settings)
 
 	obs.obs_data_set_default_int(settings, "preshow_duration", preshow_duration)
 
-	obs.obs_data_set_default_int(settings, "countdown_duration", countdown_duration)
 	obs.obs_data_set_default_int(settings, "countdown_offset", countdown_offset)
 	obs.obs_data_set_default_string(settings, "countdown_final_text", countdown_final_text)
 
@@ -264,7 +258,6 @@ function script_update(settings)
 	preshow_duration = obs.obs_data_get_int(settings, "preshow_duration")
 
 	text_source = obs.obs_data_get_string(settings, "text_source")
-	countdown_duration = obs.obs_data_get_int(settings, "countdown_duration")
 	countdown_offset = obs.obs_data_get_int(settings, "countdown_offset") * -1
 	countdown_final_text = obs.obs_data_get_string(settings, "countdown_final_text")
 
