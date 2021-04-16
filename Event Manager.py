@@ -22,7 +22,6 @@ manage_recording = True
 
 closing_scene = ""
 stop_streaming_delay = 60
-auto_stop_recording = True
 stop_recording_delay = 0
 
 def event_callback_start_recording(event):
@@ -39,10 +38,10 @@ def event_callback_stop_event(event):
 				else:
 					obs.timer_add(stop_recording, stop_recording_delay * 1000)
 			if manage_streaming and obs.obs_frontend_streaming_active():
-				if streaming_delay == 0:
+				if stop_streaming_delay == 0:
 					stop_streaming()
 				else:
-					obs.timer_add(stop_streaming, streaming_delay * 1000)
+					obs.timer_add(stop_streaming, stop_streaming_delay * 1000)
 		else:
 			if manage_recording and obs.obs_frontend_recording_active():
 				obs.timer_remove(stop_recording)
