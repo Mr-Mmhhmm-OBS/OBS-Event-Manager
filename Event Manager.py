@@ -22,14 +22,9 @@ manage_recording = True
 
 closing_scene = ""
 stop_streaming_delay = 60
-stop_recording_delay = 0
+stop_recording_delay = 0	
 
-def event_callback_start_recording(event):
-	if event == obs.OBS_FRONTEND_EVENT_SCENE_CHANGED:
-		if manage_recording and not obs.obs_frontend_recording_active():
-			obs.obs_frontend_recording_start()
-
-def event_callback_stop_event(event):
+def on_event(event):
 	if event == obs.OBS_FRONTEND_EVENT_SCENE_CHANGED:
 		if get_current_scene_name() == closing_scene:
 			if manage_recording and obs.obs_frontend_recording_active():
@@ -53,7 +48,10 @@ def update_countdown():
 	t = diff_time().total_seconds()
 	if t < 0:
 		text = countdown_final_text
-		obs.remove_current_callback()
+		obs.timer_remove(update_countdown)
+	elif not (obs.obs_frontend_streaming_active() or obs.obs_frontend_recording_active()):
+		text = ""
+		obs.timer_remove(update_countdown)
 	else:
 		text = time(minute=math.floor(t / 60), second=int(t%60)).strftime("%M:%S")
 	set_text_source(text)
@@ -75,45 +73,48 @@ def diff_time():
 	return start - now
 
 def get_current_scene_name():
-	scene = obs.obs_frontend_get_current_scene()
-	scene_name = obs.obs_source_get_name(scene)
-	obs.obs_source_release(scene)
+	scene_source = obs.obs_frontend_get_current_scene()
+	scene_name = obs.obs_source_get_name(scene_source)
+	obs.obs_source_release(scene_source)
 	return scene_name
 
 def check_start():
 	global preshow_triggered
 
 	t = diff_time().total_seconds()
-	if t > preshow_duration and (manage_streaming or manage_recording) and not (obs.obs_frontend_streaming_active() or obs.obs_frontend_recording_active()):
+	if t > preshow_duration and not (obs.obs_frontend_streaming_active() or obs.obs_frontend_recording_active()):
 		set_text_source("Waiting" + ("".join([ "." for i in range(((int(t)%4)-3)*-1)])))
 	else:
 		if t <= preshow_duration and not preshow_triggered:
 			preshow_triggered = True
-			if get_current_scene_name() != start_scene:
-				scenes = obs.obs_frontend_get_scenes()
-				if scenes != None:
-					for scene in scenes:
-						scene_name = obs.obs_source_get_name(scene);
-						if scene_name == start_scene:
-							obs.obs_frontend_set_current_scene(scene)
-							break
-				obs.source_list_release(scenes)
+			#if get_current_scene_name() != start_scene:
+			#	scenes = obs.obs_frontend_get_scenes()
+			#	if scenes != None:
+			#		for scene_source in scenes:
+			#			scene_name = obs.obs_source_get_name(scene_source)
+			#			if scene_name == start_scene:
+			#				obs.obs_frontend_set_current_scene(scene_source)
 			if manage_streaming:
 				obs.obs_frontend_streaming_start()
 			if manage_recording:
-				obs.obs_frontend_add_event_callback(event_callback_start_recording)
-		obs.timer_add(update_countdown, 1000)
-		obs.remove_current_callback()
+				obs.obs_frontend_recording_start()
+			obs.obs_frontend_add_event_callback(on_event)
+			obs.timer_add(update_countdown, 1000)
+			obs.timer_remove(check_start)
 
 def stop_streaming():
 	if manage_streaming and obs.obs_frontend_streaming_active() and get_current_scene_name() == closing_scene:
 		obs.obs_frontend_streaming_stop()
 	obs.timer_remove(stop_streaming)
+	if not (obs.obs_frontend_streaming_active() or obs.obs_frontend_recording_active()):
+		obs.obs_frontend_remove_event_callback(on_event)
 
 def stop_recording():
 	if manage_recording and obs.obs_frontend_recording_active() and get_current_scene_name() == closing_scene:
 		obs.obs_frontend_recording_stop()
 	obs.timer_remove(stop_recording)
+	if not (obs.obs_frontend_streaming_active() or obs.obs_frontend_recording_active()):
+		obs.obs_frontend_remove_event_callback(on_event)
 
 def script_description():
 	return "Automatically starts a scheduled event.\nv" + version
@@ -267,9 +268,5 @@ def script_update(settings):
 	obs.timer_remove(check_start)
 	obs.timer_remove(update_countdown)
 	set_text_source("")
-	obs.obs_frontend_remove_event_callback(event_callback_start_recording)
 	if (manage_streaming or manage_recording) and start_scene != "" and weekday == datetime.now().weekday() and diff_time().total_seconds() > 0 and not (obs.obs_frontend_streaming_active() or obs.obs_frontend_recording_active()):
 		obs.timer_add(check_start, 1000)
-
-	obs.obs_frontend_remove_event_callback(event_callback_stop_event)
-	obs.obs_frontend_add_event_callback(event_callback_stop_event)
