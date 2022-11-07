@@ -57,7 +57,7 @@ def on_event(event):
 
 def update_countdown():
 	text = ""
-	t = diff_time().total_seconds()
+	t = diff_time(event_start).total_seconds()
 	if t < 0:
 		text = countdown_final_text
 		obs.timer_remove(update_countdown)
@@ -77,10 +77,10 @@ def set_text_source(text):
 		obs.obs_data_release(settings)
 		obs.obs_source_release(source)
 
-def diff_time():
+def diff_time(start_int):
 	now = datetime.now().time()
 	now = timedelta(hours=now.hour, minutes=now.minute, seconds=now.second)
-	start = time(hour=math.floor(event_start / 60/ 60), minute = int((event_start / 60) % 60))
+	start = time(hour=math.floor(start_int / 60/ 60), minute = int((start_int / 60) % 60))
 	start = timedelta(hours=start.hour, minutes=start.minute, seconds=start.second)
 	return start - now
 
@@ -91,9 +91,10 @@ def get_current_scene_name():
 	return scene_name
 
 def check_start():
-	t = diff_time().total_seconds()
+	t = diff_time(event_start).total_seconds()
 	if t > preshow_duration and not (obs.obs_frontend_streaming_active() or obs.obs_frontend_recording_active()):
-		set_text_source("Waiting" + ("".join([ "." for i in range(((int(t)%4)-3)*-1)])))
+		preshow_diff_t = diff_time(event_start-preshow_duration).total_seconds()
+		set_text_source("Script Waiting: " + (">1h" if preshow_diff_t >60*60 else time(minute=math.floor(preshow_diff_t / 60), second=int(preshow_diff_t%60)).strftime("%M:%S")))
 	elif t <= preshow_duration:
 		obs.obs_frontend_add_event_callback(on_event)
 		if manage_streaming:
@@ -265,5 +266,5 @@ def script_update(settings):
 	obs.timer_remove(check_start)
 	obs.timer_remove(update_countdown)
 	set_text_source("")
-	if (manage_streaming or manage_recording) and start_scene != "" and weekday == datetime.now().weekday() and diff_time().total_seconds() > 0 and not (obs.obs_frontend_streaming_active() or obs.obs_frontend_recording_active()):
+	if (manage_streaming or manage_recording) and start_scene != "" and weekday == datetime.now().weekday() and diff_time(event_start).total_seconds() > 0 and not (obs.obs_frontend_streaming_active() or obs.obs_frontend_recording_active()):
 		obs.timer_add(check_start, 1000)
